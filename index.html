@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>FleetOS — Live Terminal</title>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #050708; --card: #0c0f12; --brd: #1a1f24;
+            --accent: #f59e0b; --red: #ef4444; --green: #10b981; --blue: #3b82f6;
+            --text: #eceef0; --dim: #64748b;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
+        
+        /* Header */
+        header { height: 60px; border-bottom: 1px solid var(--brd); display: flex; align-items: center; padding: 0 24px; justify-content: space-between; background: rgba(5,7,8,0.8); backdrop-filter: blur(10px); z-index: 10; }
+        .logo { font-family: 'JetBrains Mono'; font-weight: 800; font-size: 14px; letter-spacing: 2px; color: var(--accent); }
+        .status-dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; display: inline-block; margin-right: 8px; box-shadow: 0 0 10px var(--green); }
+
+        /* Layout */
+        .main-container { display: flex; flex: 1; overflow: hidden; }
+        sidebar { width: 240px; border-right: 1px solid var(--brd); padding: 20px; display: flex; flex-direction: column; gap: 8px; background: var(--bg); }
+        .nav-bt { padding: 12px; border-radius: 8px; cursor: pointer; color: var(--dim); font-size: 13px; transition: 0.2s; border: 1px solid transparent; }
+        .nav-bt:hover { color: var(--text); background: var(--card); }
+        .nav-bt.active { color: var(--accent); background: rgba(245,158,11,0.1); border-color: rgba(245,158,11,0.2); }
+
+        /* Content */
+        section { flex: 1; padding: 32px; overflow-y: auto; background: linear-gradient(180deg, #070a0d 0%, #050708 100%); }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+        
+        /* Vehicle Card */
+        .v-card { background: var(--card); border: 1px solid var(--brd); border-radius: 12px; padding: 20px; transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1); position: relative; overflow: hidden; }
+        .v-card:hover { border-color: var(--accent); transform: translateY(-4px); box-shadow: 0 12px 24px rgba(0,0,0,0.4); }
+        .v-header { display: flex; justify-content: space-between; margin-bottom: 16px; align-items: center; }
+        .plate { font-family: 'JetBrains Mono'; font-size: 11px; color: var(--accent); background: rgba(245,158,11,0.1); padding: 4px 8px; border-radius: 4px; }
+        .v-name { font-size: 18px; font-weight: 800; }
+        
+        /* Progress Bars */
+        .bar-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--dim); margin-bottom: 6px; font-family: 'JetBrains Mono'; }
+        .bar-bg { height: 4px; background: #1a1f24; border-radius: 2px; margin-bottom: 16px; }
+        .bar-fill { height: 100%; border-radius: 2px; transition: 1s ease-in-out; }
+
+        /* Badges */
+        .badge { font-family: 'JetBrains Mono'; font-size: 9px; padding: 4px 8px; border-radius: 4px; font-weight: 700; }
+        .b-urgent { background: rgba(239, 68, 68, 0.1); color: var(--red); border: 1px solid var(--red); }
+        .b-ok { background: rgba(16, 185, 129, 0.1); color: var(--green); border: 1px solid var(--green); }
+
+        /* Toasts */
+        #toast-stack { position: fixed; bottom: 30px; right: 30px; display: flex; flex-direction: column; gap: 10px; z-index: 100; }
+        .toast { background: var(--card); border: 1px solid var(--brd); padding: 16px; border-radius: 8px; border-left: 4px solid var(--accent); min-width: 250px; animation: slide 0.4s ease-out; }
+        @keyframes slide { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="logo">FLEET//OS.SYS</div>
+    <div><span class="status-dot"></span><span id="clock" style="font-family: 'JetBrains Mono'; font-size: 12px;">12:00:00</span></div>
+</header>
+
+<div class="main-container">
+    <sidebar>
+        <div class="nav-bt active">Tableau de Bord</div>
+        <div class="nav-bt">Cartographie Live</div>
+        <div class="nav-bt">Rapports RSE</div>
+        <div class="nav-bt">Maintenance</div>
+    </sidebar>
+
+    <section>
+        <div style="margin-bottom: 32px;">
+            <h1 style="font-size: 32px; font-weight: 800; margin-bottom: 8px;">Surveillance Flotte</h1>
+            <p style="color: var(--dim); font-size: 14px;">Analyse en temps réel des unités actives</p>
+        </div>
+        <div class="grid" id="fleet-grid"></div>
+    </section>
+</div>
+
+<div id="toast-stack"></div>
+
+<script>
+    const DATA = [
+        { id: 1, plate: "FR-101-RT", model: "Volvo FH16", fuel: 14, load: 92, status: "Urgent" },
+        { id: 2, plate: "DE-404-NF", model: "Scania S650", fuel: 88, load: 45, status: "OK" },
+        { id: 3, plate: "IT-202-PL", model: "Mercedes Actros", fuel: 42, load: 10, status: "OK" },
+        { id: 4, plate: "ES-998-XX", model: "Renault T-High", fuel: 8, load: 98, status: "Urgent" }
+    ];
+
+    function init() {
+        const grid = document.getElementById('fleet-grid');
+        grid.innerHTML = DATA.map(v => `
+            <div class="v-card">
+                <div class="v-header">
+                    <span class="plate">${v.plate}</span>
+                    <span class="badge ${v.status === 'Urgent' ? 'b-urgent' : 'b-ok'}">${v.status.toUpperCase()}</span>
+                </div>
+                <div class="v-name">${v.model}</div>
+                <div style="margin-top: 20px;">
+                    <div class="bar-label"><span>FUEL LEVEL</span><span>${v.fuel}%</span></div>
+                    <div class="bar-bg"><div class="bar-fill" style="width: ${v.fuel}%; background: ${v.fuel < 20 ? 'var(--red)' : 'var(--green)'}"></div></div>
+                    <div class="bar-label"><span>CARGO LOAD</span><span>${v.load}%</span></div>
+                    <div class="bar-bg"><div class="bar-fill" style="width: ${v.load}%; background: var(--blue)"></div></div>
+                </div>
+            </div>
+        `).join('');
+
+        // Notifications auto
+        DATA.filter(v => v.status === 'Urgent').forEach(v => {
+            pushToast("ALERTE CRITIQUE", `Véhicule ${v.plate} : Niveau critique détecté.`);
+        });
+    }
+
+    function pushToast(title, text) {
+        const stack = document.getElementById('toast-stack');
+        const t = document.createElement('div');
+        t.className = 'toast';
+        t.innerHTML = `<strong>${title}</strong><br><small style="color:var(--dim)">${text}</small>`;
+        stack.appendChild(t);
+        setTimeout(() => t.remove(), 5000);
+    }
+
+    setInterval(() => {
+        document.getElementById('clock').innerText = new Date().toLocaleTimeString('fr-FR');
+    }, 1000);
+
+    init();
+</script>
+</body>
+</html>
+
